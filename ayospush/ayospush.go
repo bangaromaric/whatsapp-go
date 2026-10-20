@@ -15,6 +15,7 @@
 package ayospush
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -211,3 +212,24 @@ func clientParDefaut() *http.Client {
 	transport.DialContext = (&net.Dialer{Timeout: delaiConnexion}).DialContext
 	return &http.Client{Timeout: delaiTotal, Transport: transport}
 }
+
+// Gardes de compilation : les deux implémentations du port doivent le satisfaire.
+//
+// Le README promet qu'un appelant peut déclarer ce port chez lui et y poser soit ce client,
+// soit le bouchon, sans rien d'autre. Rien ne le garantissait : une signature qui dériverait
+// casserait chaque consommateur sans que ce dépôt s'en aperçoive, et la promesse du README
+// deviendrait fausse en silence.
+//
+// Elles vivent dans le code et non dans un test, comme la garde du client d'identité de Kayé,
+// parce qu'elles valent pour le build et non pour un `go test`. Et elles vivent dans CE
+// paquet et non à la racine, parce que la racine ne peut pas importer son propre sous-paquet :
+// la dépendance ne va que dans un sens.
+var (
+	_ interface {
+		Envoyer(ctx context.Context, numeroE164 string, m whatsapp.Modele) (whatsapp.Reference, error)
+	} = (*Client)(nil)
+
+	_ interface {
+		Envoyer(ctx context.Context, numeroE164 string, m whatsapp.Modele) (whatsapp.Reference, error)
+	} = whatsapp.Bouchon{}
+)

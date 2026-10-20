@@ -34,10 +34,10 @@ qu'en production, au premier envoi.
 
 | Il fait | Il ne fait pas |
 |---|---|
-| Le jeton de la passerelle, en cache, sous verrou, renouvelé proactivement et réactivement | Lancer une goroutine. La connexion est paresseuse, et le verrou est tenu pendant |
+| Le jeton de la passerelle, en cache, sous verrou, renouvelé proactivement et réactivement | Lancer une goroutine. La connexion est paresseuse, et le verrou est tenu pendant. Le jeton en mémoire est le seul état que le module garde |
 | L'envoi d'un message de gabarit, et la référence du message accepté | Compter le plafond. Les paliers se comptent en destinataires par 24 h, et ce module n'a aucun stockage |
 | Refuser avant la moindre requête ce que la plateforme refuse en silence : variable vide, saut de ligne, UTF-8 invalide, variable trop longue | Vérifier l'arité du gabarit. Seul Meta connaît le gabarit ; cela se vérifie une fois, à la main |
-| Classer les échecs derrière six sentinelles, dont celles qui disent « rejouable » | Journaliser. Il rend des erreurs, l'appelant a sa politique de trace. `MasquerNumero` est offerte pour cela |
+| Classer les échecs derrière six sentinelles, dont celles qui disent « rejouable » | Journaliser, **hors le bouchon**, qui n'existe que pour dire ce qui serait parti. Le chemin de production est muet et rend des erreurs ; `MasquerNumero` est offerte pour que vous traciez sans numéro en clair |
 | Masquer un numéro pour un journal, et fournir un bouchon qui n'envoie rien | Connaître la notion d'environnement. Refuser le bouchon en production est une politique d'appelant |
 | Fabriquer les liens `wa.me`, encodage compris | Lire l'environnement de lui-même. `Reglages` est une valeur, pas une variable |
 | | Traduire en codes HTTP ni en codes métier. C'est au projet appelant de le faire, en un seul endroit |

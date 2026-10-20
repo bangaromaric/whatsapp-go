@@ -6,9 +6,16 @@
 // aujourd'hui ayospush. Changer de fournisseur, y compris pour l'API Cloud de Meta en
 // direct, ne doit toucher que ce sous-paquet.
 //
-// Il ne décide de rien d'applicatif : il ne journalise pas, ne lit pas l'environnement de
-// lui-même, ne crée aucune goroutine, ne stocke rien, et ne convertit aucune erreur en code
-// HTTP ni en code métier. Celui qui le câble garde ces politiques.
+// Il ne décide de rien d'applicatif : il ne lit pas l'environnement de lui-même, ne crée
+// aucune goroutine, ne garde aucun état durable hors le jeton de la passerelle, et ne
+// convertit aucune erreur en code HTTP ni en code métier. Celui qui le câble garde ces
+// politiques.
+//
+// IL NE JOURNALISE PAS, à une exception qu'il faut connaître : le [Bouchon] journalise,
+// puisque dire ce qui serait parti est sa seule raison d'être, et il le fait sur le journal
+// que l'appelant lui donne. Le chemin de production, lui, est muet et se contente de rendre
+// des erreurs ; [MasquerNumero] est offerte pour que l'appelant trace sans écrire un numéro
+// en clair.
 //
 // # Deux mécanismes, et ils ne se confondent pas
 //
