@@ -1,7 +1,9 @@
 package whatsapp_test
 
 import (
+	"errors"
 	"fmt"
+	"time"
 
 	whatsapp "github.com/bangaromaric/whatsapp-go"
 )
@@ -79,4 +81,33 @@ func ExampleMasquerNumero() {
 	fmt.Println(whatsapp.MasquerNumero("+24166123456"))
 	// Output:
 	// +241****56
+}
+
+// ExampleDelaiAvantRejeu montre comment suivre le délai que la passerelle annonce.
+//
+// L'erreur construite ici est exactement celle qu'un adaptateur de passerelle rend sur un 429
+// qui portait « Retry-After: 40 ». Les deux étages d'emballage y sont, parce que c'est sous
+// cette forme-là que l'appelant la reçoit, et qu'un délai lisible seulement avant l'emballage
+// ne servirait à personne.
+func ExampleDelaiAvantRejeu() {
+	err := whatsapp.EnvoiError{
+		Operation: "envoi",
+		Err: whatsapp.QuotaError{
+			Debit: whatsapp.Debit{Limite: 5, Reprise: 40 * time.Second},
+			Err:   fmt.Errorf("%w: statut 429", whatsapp.ErrQuotaAtteint),
+		},
+	}
+
+	// La saturation reste interrogeable comme avant : ce type s'ajoute, il ne remplace rien.
+	fmt.Println(errors.Is(err, whatsapp.ErrQuotaAtteint))
+
+	// Et le délai se lit sans connaître le nom du fournisseur. Faux voudrait dire « elle n'a
+	// rien annoncé », et non « rejouable tout de suite ».
+	if delai, annonce := whatsapp.DelaiAvantRejeu(err); annonce {
+		fmt.Println("reprendre dans", delai)
+	}
+
+	// Output:
+	// true
+	// reprendre dans 40s
 }

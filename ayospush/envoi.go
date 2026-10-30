@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	whatsapp "github.com/bangaromaric/whatsapp-go"
 )
@@ -161,8 +162,20 @@ func (c *Client) poster(ctx context.Context, corps []byte, typeContenu, jeton st
 	}
 	defer fermer(reponse)
 
+	// UN SEUL INSTANT POUR TOUTE LA RÉPONSE. Les deux lectures du bridage qui suivent
+	// convertissent des dates en durées : les dater de deux appels d'horloge différents
+	// donnerait deux délais différents pour le même en-tête, et un test à horloge figée ne
+	// le verrait jamais.
+	maintenant := c.maintenant()
+
+	// Le bridage annoncé est signalé AVANT le tri par code de retour, donc sur une réponse
+	// heureuse comme sur un refus. C'est sur les réponses heureuses qu'il a le plus de
+	// valeur : attendre un 429 pour découvrir que le plafond configuré est faux, c'est le
+	// découvrir une fois qu'un message a déjà été refusé.
+	c.signaler(lireDebit(reponse.Header, maintenant))
+
 	if reponse.StatusCode < 200 || reponse.StatusCode > 299 {
-		return whatsapp.Reference{}, classer(reponse)
+		return whatsapp.Reference{}, classer(reponse, maintenant)
 	}
 
 	var lue reponseEnvoi
@@ -255,7 +268,7 @@ func variablesJSON(variables []string) (string, error) {
 // Un inconnu est traité comme une indisponibilité : c'est le défaut le moins coûteux, parce
 // qu'un rejeu différé sur une erreur de contrat se voit dans les journaux, alors qu'un refus
 // définitif sur une panne passagère perd un message pour rien.
-func classer(reponse *http.Response) error {
+func classer(reponse *http.Response, maintenant time.Time) error {
 	raison := lireRaison(reponse.Body)
 
 	var motif error
@@ -270,10 +283,22 @@ func classer(reponse *http.Response) error {
 		motif = ErrIndisponible
 	}
 
-	if raison == "" {
-		return fmt.Errorf("%w: statut %d", motif, reponse.StatusCode)
+	echec := fmt.Errorf("%w: statut %d", motif, reponse.StatusCode)
+	if raison != "" {
+		echec = fmt.Errorf("%w: statut %d: %s", motif, reponse.StatusCode, raison)
 	}
-	return fmt.Errorf("%w: statut %d: %s", motif, reponse.StatusCode, raison)
+
+	// LE DÉLAI N'EST LU QUE SUR UNE SATURATION, et c'est le seul cas où il veut dire quelque
+	// chose : un 400 ne se rejoue jamais, donc savoir quand le rejouer n'avance à rien, et
+	// une panne ne s'accompagne d'aucune promesse de réouverture.
+	//
+	// L'emballage AJOUTE et ne remplace pas : ErrQuota reste la cause, donc l'interrogation
+	// par errors.Is continue de répondre, sur la sentinelle de ce paquet comme sur celle du
+	// module d'envoi. C'est ce qui permet d'introduire ce type sans toucher un seul appelant.
+	if reponse.StatusCode == http.StatusTooManyRequests {
+		return whatsapp.QuotaError{Debit: lireDebit(reponse.Header, maintenant), Err: echec}
+	}
+	return echec
 }
 
 // lireRaison recopie le début du corps d'erreur, pour le journal.

@@ -3,6 +3,7 @@ package ayospush_test
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 
 	whatsapp "github.com/bangaromaric/whatsapp-go"
@@ -44,4 +45,34 @@ func ExampleNouveau() {
 
 	// La référence est la seule clé qui retrouve le message chez le fournisseur. À garder.
 	fmt.Println(reference)
+}
+
+// ExampleAvecObservateur montre comment constater qu'un plafond configuré a dérivé.
+//
+// IL NE TOURNE PAS NON PLUS, pour la même raison que l'exemple ci-dessus, et il est là pour
+// la même : que l'extrait du README ne puisse pas dériver de l'API sans que le build le dise.
+//
+// L'intérêt du rappel est qu'il parle sur une réponse HEUREUSE. Attendre un 429 pour
+// découvrir que le plafond configuré est faux, c'est le découvrir une fois qu'un message a
+// déjà été refusé.
+func ExampleAvecObservateur() {
+	const plafondConfigure = 5
+
+	client, err := ayospush.Nouveau(ayospush.Reglages{
+		BaseURL:    "https://ayospush.com",
+		CleAPI:     os.Getenv("WHATSAPP_API_KEY"),
+		SecretAPI:  os.Getenv("WHATSAPP_API_SECRET"),
+		Expediteur: os.Getenv("WHATSAPP_SENDER_ID"),
+	}, ayospush.AvecObservateur(func(d whatsapp.Debit) {
+		if d.Limite > 0 && d.Limite != plafondConfigure {
+			slog.Warn("le plafond configure a derive de celui de la passerelle",
+				"configure", plafondConfigure, "annonce", d.Limite)
+		}
+	}))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	_ = client
 }

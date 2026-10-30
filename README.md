@@ -37,6 +37,7 @@ qu'en production, au premier envoi.
 | Le jeton de la passerelle, en cache, sous verrou, renouvelé proactivement et réactivement | Lancer une goroutine. La connexion est paresseuse, et le verrou est tenu pendant. Le jeton en mémoire est le seul état que le module garde |
 | L'envoi d'un message de gabarit, et la référence du message accepté | Compter le plafond. Les paliers se comptent en destinataires par 24 h, et ce module n'a aucun stockage |
 | Refuser avant la moindre requête ce que la plateforme refuse en silence : variable vide, saut de ligne, UTF-8 invalide, variable trop longue | Vérifier l'arité du gabarit. Seul Meta connaît le gabarit ; cela se vérifie une fois, à la main |
+| Rapporter le bridage que la passerelle annonce : le plafond qu'elle applique et le délai avant reprise | Ralentir, compter ou rejouer de lui-même. Il rapporte, l'appelant conduit |
 | Classer les échecs derrière six sentinelles, dont celles qui disent « rejouable » | Journaliser, **hors le bouchon**, qui n'existe que pour dire ce qui serait parti. Le chemin de production est muet et rend des erreurs ; `MasquerNumero` est offerte pour que vous traciez sans numéro en clair |
 | Masquer un numéro pour un journal, et fournir un bouchon qui n'envoie rien | Connaître la notion d'environnement. Refuser le bouchon en production est une politique d'appelant |
 | Fabriquer les liens `wa.me`, encodage compris | Lire l'environnement de lui-même. `Reglages` est une valeur, pas une variable |
@@ -123,8 +124,12 @@ Le discriminant est le motif, pas le code HTTP.
 ```go
 switch {
 case errors.Is(err, whatsapp.ErrQuotaAtteint):
-    // Rejouable, mais JAMAIS tout de suite : le palier se compte en destinataires
-    // distincts par vingt-quatre heures, donc l'attente utile est de l'ordre de l'heure.
+    // Rejouable, mais JAMAIS tout de suite. Si la passerelle a dit quand, suivez-la ;
+    // sinon le palier se compte en destinataires distincts par vingt-quatre heures, donc
+    // l'attente utile est de l'ordre de l'heure.
+    if delai, annonce := whatsapp.DelaiAvantRejeu(err); annonce {
+        reprendreDans(delai)
+    }
 case errors.Is(err, ayospush.ErrRequeteRefusee):
     // Gabarit inconnu, arite fausse, numero invalide. NE JAMAIS REJOUER : un rejeu
     // echouerait a l'identique et ferait d'une faute de configuration une tempete.
@@ -138,6 +143,29 @@ case errors.Is(err, ayospush.ErrConfiguration):
     // Reglage absent. Aucune requete n'a ete emise.
 }
 ```
+
+### Ce que la passerelle dit de son propre bridage
+
+Un refus de débit s'accompagne parfois d'un délai, et le suivre vaut mieux que le deviner :
+un rejeu trop tôt est exactement ce qu'un palier d'envoi punit. `DelaiAvantRejeu` le rend,
+et **faux ne veut pas dire « rejouable tout de suite »** : il veut dire que la passerelle
+n'a rien annoncé, et la décision vous revient.
+
+`whatsapp.Debit` porte en plus le plafond annoncé. Posé sur `AvecObservateur`, il se lit dès
+une réponse heureuse, donc **avant** le premier refus :
+
+```go
+client, err := ayospush.Nouveau(reglages, ayospush.AvecObservateur(func(d whatsapp.Debit) {
+    if d.Limite > 0 && d.Limite != plafondConfigure {
+        slog.Warn("le plafond configure a derive de celui de la passerelle",
+            "configure", plafondConfigure, "annonce", d.Limite)
+    }
+}))
+```
+
+Le module ne fait toujours **rien** de ces valeurs : il ne compte pas, ne ralentit pas, ne
+rejoue pas et ne journalise pas. Il rapporte. L'observateur est appelé sur la goroutine de
+l'envoi, donc un observateur lent ralentit l'envoi.
 
 **`whatsapp.ErrQuotaAtteint` vit à la racine et non dans le paquet du fournisseur**, et c'est
 ce qui la rend utilisable : un appelant qui doit en tirer une phrase à l'écran n'a pas à

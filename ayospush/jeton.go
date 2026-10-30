@@ -51,12 +51,17 @@ type reponseLogin struct {
 	} `json:"data"`
 }
 
-// ttlMax borne ce qu'on accepte comme durée de vie annoncée.
+// dureeMax borne toute durée que la passerelle annonce, quelle qu'elle soit.
 //
 // Vingt-quatre heures. Une valeur plus grande n'est pas une bonne nouvelle, c'est le signe
 // qu'on a mal lu : une date interprétée comme des secondes Unix, ou l'inverse, donne des
-// durées absurdes. Mieux vaut alors le repli d'une heure, qui ne coûte qu'une reconnexion.
-const ttlMax = 24 * time.Hour
+// durées absurdes. Mieux vaut alors le repli de l'appelant, qui ne coûte qu'une reconnexion
+// pour un jeton, et une attente devinée pour une reprise après saturation.
+//
+// LA MÊME BORNE SERT AUX DEUX, et ce n'est pas une économie de constante : c'est la même
+// erreur qu'elle écarte, celle d'une magnitude mal lue. Les séparer ferait deux seuils à
+// tenir d'accord pour un seul danger.
+const dureeMax = 24 * time.Hour
 
 // dureeDeVie rend la durée de vie annoncée du jeton, ou zéro si la réponse n'en dit rien
 // d'exploitable.
@@ -88,9 +93,13 @@ func nombre(brut json.RawMessage) (float64, bool) {
 	return lu, true
 }
 
-// borner écarte une durée qui ne peut pas être celle d'un jeton.
+// borner écarte une durée annoncée qui ne peut pas être vraie.
+//
+// Zéro veut dire « inexploitable », et c'est la convention que suivent tous ses appelants :
+// une durée nulle, négative ou démesurée laisse l'appelant prendre son propre repli au lieu
+// de propager une valeur fausse.
 func borner(d time.Duration) time.Duration {
-	if d <= 0 || d > ttlMax {
+	if d <= 0 || d > dureeMax {
 		return 0
 	}
 	return d
@@ -173,7 +182,7 @@ func (c *Client) seConnecter(ctx context.Context) (string, error) {
 	defer fermer(reponse)
 
 	if reponse.StatusCode < 200 || reponse.StatusCode > 299 {
-		return "", classer(reponse)
+		return "", classer(reponse, c.maintenant())
 	}
 
 	var lue reponseLogin

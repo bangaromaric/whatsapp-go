@@ -36,6 +36,12 @@ const (
 type reponse struct {
 	statut int
 	corps  string
+
+	// entetes sont posés en plus du type de contenu. Nuls, la réponse n'en porte aucun.
+	//
+	// Ils existent pour les en-têtes de bridage, qui ne sont lisibles QUE là : les mettre
+	// dans le corps ne prouverait rien, puisque c'est bien l'en-tête que le code lit.
+	entetes map[string]string
 }
 
 // recue est ce que le faux fournisseur a vu arriver.
@@ -88,9 +94,7 @@ func (p *passerelle) servirLogin(w http.ResponseWriter, r *http.Request) {
 	r2 := suivante(p.logins, &p.iLogin)
 	p.mu.Unlock()
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(r2.statut)
-	_, _ = w.Write([]byte(r2.corps))
+	ecrire(w, r2)
 }
 
 func (p *passerelle) servirEnvoi(w http.ResponseWriter, r *http.Request) {
@@ -115,9 +119,17 @@ func (p *passerelle) servirEnvoi(w http.ResponseWriter, r *http.Request) {
 	r2 := suivante(p.envois, &p.iEnvoi)
 	p.mu.Unlock()
 
+	ecrire(w, r2)
+}
+
+// ecrire rend la réponse programmée, en-têtes compris.
+func ecrire(w http.ResponseWriter, r reponse) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(r2.statut)
-	_, _ = w.Write([]byte(r2.corps))
+	for cle, valeur := range r.entetes {
+		w.Header().Set(cle, valeur)
+	}
+	w.WriteHeader(r.statut)
+	_, _ = w.Write([]byte(r.corps))
 }
 
 // suivante rend la réponse programmée du tour, la dernière se répétant. Verrou tenu.

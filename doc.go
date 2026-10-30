@@ -54,5 +54,14 @@
 // distincts par vingt-quatre heures, et ce paquet n'a aucun stockage : il ne peut donc pas
 // tenir ce compte. Il rend [ErrQuotaAtteint], interrogeable par errors.Is sans avoir à
 // connaître le nom du fournisseur, et c'est à l'appelant de décider ce que la saturation vaut
-// pour lui. Rejouable, mais jamais tout de suite : l'attente utile est de l'ordre de l'heure.
+// pour lui.
+//
+// COMBIEN DE TEMPS ATTENDRE N'EST PLUS À DEVINER quand la passerelle le dit. Elle annonce
+// parfois un délai de reprise, et [DelaiAvantRejeu] le rend ; [Debit] porte en plus le plafond
+// qu'elle applique, ce qui permet de constater qu'un plafond configuré a dérivé du sien avant
+// d'en essuyer le refus. Quand elle n'annonce rien, et c'est fréquent, l'appelant garde sa
+// décision : l'attente utile est alors de l'ordre de l'heure.
+//
+// Ce paquet ne compte toujours rien, ne ralentit rien et ne rejoue rien. Il rapporte, et c'est
+// tout : la conduite à tenir appartient à celui qui sait pourquoi il envoyait.
 package whatsapp

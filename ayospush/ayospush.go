@@ -122,6 +122,12 @@ type Client struct {
 	maintenant func() time.Time
 	reglages   Reglages
 
+	// observateur reçoit ce que la passerelle annonce de son bridage. Nul par défaut.
+	//
+	// Il n'est écrit qu'au câblage, avant le premier envoi, et seulement lu ensuite : c'est
+	// ce qui permet de s'en passer de verrou alors que les envois sont concurrents.
+	observateur func(whatsapp.Debit)
+
 	// mu garde le jeton, et le verrou est tenu PENDANT la connexion. Sans cela, un
 	// démarrage à froid sous trafic déclenche autant de connexions que de requêtes ; et
 	// si la passerelle n'admet qu'un seul jeton actif par clé, ces connexions
@@ -158,6 +164,32 @@ func AvecHorloge(maintenant func() time.Time) Option {
 	return func(c *Client) {
 		if maintenant != nil {
 			c.maintenant = maintenant
+		}
+	}
+}
+
+// AvecObservateur fait suivre ce que la passerelle annonce de son bridage.
+//
+// POURQUOI CECI EXISTE ALORS QUE LE MODULE NE COMPTE RIEN. Un plafond d'envoi se configure
+// chez l'appelant, à partir d'une valeur mesurée un jour donné ; la passerelle, elle, annonce
+// la sienne à chaque réponse. Sans ce rappel, l'écart entre les deux ne se découvre qu'au
+// premier refus, c'est à dire au premier message perdu. Avec lui, il se lit dans un journal
+// avant d'avoir coûté quoi que ce soit.
+//
+// Le module ne fait toujours RIEN de cette valeur : il ne compte pas, ne ralentit pas, ne
+// journalise pas. Il la rend, et l'appelant décide, comme pour tout le reste.
+//
+// TROIS PROPRIÉTÉS À CONNAÎTRE AVANT D'EN POSER UN. Il est appelé sur la goroutine de
+// l'envoi, donc un observateur lent ralentit l'envoi et un observateur bloquant le bloque ;
+// il ne l'est que lorsque la passerelle a effectivement annoncé quelque chose, pour qu'un
+// journal branché dessus ne se remplisse pas de valeurs vides ; et il ne l'est QUE SUR LE
+// CHEMIN D'ENVOI, jamais sur la connexion, parce qu'un bridage de l'authentification ne
+// compte pas dans le même seau que les messages et qu'en faire la somme donnerait un chiffre
+// qui ne désigne rien.
+func AvecObservateur(observateur func(whatsapp.Debit)) Option {
+	return func(c *Client) {
+		if observateur != nil {
+			c.observateur = observateur
 		}
 	}
 }
