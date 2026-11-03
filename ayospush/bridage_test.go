@@ -152,12 +152,17 @@ func TestLObservateurVoitLeBridageDesLaPremiereReponseHeureuse(t *testing.T) {
 	}
 }
 
-// TestLObservateurSeTaitQuandLaPasserelleNAnnonceRien évite de remplir un journal de vide.
+// TestLObservateurVoitAussiLAbsenceDAnnonce fige la correction de la v0.2.1.
 //
-// Un rappel branché sur une sortie de journalisation écrirait une ligne par envoi, toutes
-// identiques et toutes creuses. Le silence est donc le défaut, et une ligne écrite veut dire
-// que la passerelle a réellement parlé.
-func TestLObservateurSeTaitQuandLaPasserelleNAnnonceRien(t *testing.T) {
+// IL FILTRAIT LE CAS VIDE, et c'était un défaut : l'absence d'en-tête devenait indiscernable
+// d'une limite confortable, puisque les deux produisaient le même silence. Un appelant qui
+// cherche à savoir ce que sa passerelle autorise ne pouvait pas trancher entre « elle
+// m'accorde large » et « elle ne dit rien », ce qui est justement la question qu'un
+// observateur sert à poser.
+//
+// Mesuré chez un consommateur le 3 novembre 2026 : un code parti, un observateur muet, et
+// aucun moyen de savoir laquelle des deux situations on observait.
+func TestLObservateurVoitAussiLAbsenceDAnnonce(t *testing.T) {
 	t.Parallel()
 
 	p := nouvellePasserelle(t,
@@ -165,14 +170,14 @@ func TestLObservateurSeTaitQuandLaPasserelleNAnnonceRien(t *testing.T) {
 		[]reponse{envoiOK("req-1")})
 
 	var mu sync.Mutex
-	rappels := 0
+	var vus []whatsapp.Debit
 
 	client, err := ayospush.Nouveau(reglages(p),
 		ayospush.AvecClientHTTP(p.srv.Client()),
-		ayospush.AvecObservateur(func(whatsapp.Debit) {
+		ayospush.AvecObservateur(func(d whatsapp.Debit) {
 			mu.Lock()
 			defer mu.Unlock()
-			rappels++
+			vus = append(vus, d)
 		}))
 	if err != nil {
 		t.Fatalf("Nouveau() = _, %v, want nil", err)
@@ -184,7 +189,13 @@ func TestLObservateurSeTaitQuandLaPasserelleNAnnonceRien(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
-	if rappels != 0 {
-		t.Errorf("rappels de l observateur = %d, want 0", rappels)
+	// UN SEUL RAPPEL, PORTANT LA VALEUR ZÉRO. C'est ce qui permet à l'appelant de dire « la
+	// passerelle n'annonce rien », au lieu de ne rien pouvoir dire du tout.
+	want := []whatsapp.Debit{{}}
+	if diff := cmp.Diff(want, vus); diff != "" {
+		t.Errorf("debits observes (-want +got):\n%s", diff)
+	}
+	if len(vus) == 1 && vus[0].Annonce() {
+		t.Error("Annonce() rend vrai sur un debit vide, want faux")
 	}
 }

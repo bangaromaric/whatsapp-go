@@ -118,13 +118,22 @@ func apresReouverture(brut string, maintenant time.Time) time.Duration {
 	}
 }
 
-// signaler fait suivre le bridage annoncé à l'observateur, s'il y en a un.
+// signaler fait suivre à l'observateur ce que la passerelle a annoncé, y compris RIEN.
 //
-// Le silence est le défaut : sans observateur, ou sans rien d'annoncé, rien n'est appelé. Un
-// appelant qui journalise au fil des rappels n'écrit donc une ligne que quand la passerelle a
-// réellement parlé.
+// IL NE FILTRAIT PAS TOUJOURS RIEN, ET LE CHANGEMENT EST UNE CORRECTION. Cette fonction
+// écartait les débits vides, « pour qu'un journal branché dessus ne se remplisse pas de
+// valeurs vides ». L'intention était bonne et le résultat faux : elle rendait l'absence
+// d'en-tête INDISCERNABLE d'une limite confortable, puisque les deux produisaient le même
+// silence. Un appelant qui cherchait à savoir ce que sa passerelle autorise n'avait aucun
+// moyen de distinguer « elle m'accorde large » de « elle ne dit rien », ce qui est justement
+// la question qu'un observateur sert à trancher.
+//
+// C'ÉTAIT AUSSI CE MODULE DÉCIDANT À LA PLACE DE L'APPELANT, contre sa propre doctrine : il
+// rapporte, l'appelant conduit. Un appelant qui ne veut pas de lignes vides les écarte par un
+// test sur [whatsapp.Debit.Annonce], en une ligne, et celui qui veut diagnostiquer garde le
+// cas vide. Les deux sont désormais possibles ; un seul l'était.
 func (c *Client) signaler(debit whatsapp.Debit) {
-	if c.observateur == nil || !debit.Annonce() {
+	if c.observateur == nil {
 		return
 	}
 	c.observateur(debit)

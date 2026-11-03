@@ -181,11 +181,16 @@ func AvecHorloge(maintenant func() time.Time) Option {
 //
 // TROIS PROPRIÉTÉS À CONNAÎTRE AVANT D'EN POSER UN. Il est appelé sur la goroutine de
 // l'envoi, donc un observateur lent ralentit l'envoi et un observateur bloquant le bloque ;
-// il ne l'est que lorsque la passerelle a effectivement annoncé quelque chose, pour qu'un
-// journal branché dessus ne se remplisse pas de valeurs vides ; et il ne l'est QUE SUR LE
+// il est appelé à CHAQUE réponse, Y COMPRIS quand la passerelle n'a rien annoncé, auquel cas
+// le débit est sa valeur zéro et [whatsapp.Debit.Annonce] le dit ; et il ne l'est QUE SUR LE
 // CHEMIN D'ENVOI, jamais sur la connexion, parce qu'un bridage de l'authentification ne
 // compte pas dans le même seau que les messages et qu'en faire la somme donnerait un chiffre
 // qui ne désigne rien.
+//
+// LE CAS VIDE EST RENDU ET NON FILTRÉ, et c'est délibéré depuis la v0.2.1 : le filtrer rendait
+// l'absence d'en-tête indiscernable d'une limite confortable, alors que c'est exactement ce
+// qu'un observateur sert à distinguer. Un appelant qui ne veut pas de lignes vides écarte le
+// cas par un test sur Annonce.
 func AvecObservateur(observateur func(whatsapp.Debit)) Option {
 	return func(c *Client) {
 		if observateur != nil {

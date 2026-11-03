@@ -163,6 +163,12 @@ client, err := ayospush.Nouveau(reglages, ayospush.AvecObservateur(func(d whatsa
 }))
 ```
 
+L'observateur est appelé à **chaque** réponse, y compris quand la passerelle n'annonce rien :
+le `Debit` est alors sa valeur zéro, et `Annonce()` le dit. Ce cas n'est pas filtré, et c'est
+délibéré depuis la v0.2.1 : le filtrer rendait l'absence d'en-tête indiscernable d'une limite
+confortable, alors que c'est exactement ce qu'un observateur sert à distinguer. Un appelant qui
+ne veut pas de lignes vides écarte le cas par un test sur `Annonce()`.
+
 Le module ne fait toujours **rien** de ces valeurs : il ne compte pas, ne ralentit pas, ne
 rejoue pas et ne journalise pas. Il rapporte. L'observateur est appelé sur la goroutine de
 l'envoi, donc un observateur lent ralentit l'envoi.
